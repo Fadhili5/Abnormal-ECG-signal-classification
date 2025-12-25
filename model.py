@@ -2,9 +2,8 @@ import torch
 import torch.nn as nn
 
 class ResidualBlock(nn.Module):
-    def __init__(self, in_features, out_features, kernel_size, stride, momentum):
+    def __init__(self, in_features, out_features, kernel_size, stride, momentum, padding):
         super(ResidualBlock, self).__init__()
-        padding = kernel_size // 2 
         self.conv1 = nn.Conv2d(in_features, out_features, kernel_size, stride, padding)
         self.conv2 = nn.Conv2d(in_features, out_features, kernel_size, stride, padding) 
         self.conv3 = nn.Conv2d(out_features, out_features, kernel_size, stride, padding) 
