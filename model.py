@@ -2,15 +2,15 @@ import torch
 import torch.nn as nn
 
 class ResidualBlock(nn.Module):
-    def __init__(self, in_features, out_features, kernel_size, stride):
+    def __init__(self, in_features, out_features, kernel_size, stride, momentum):
         super(ResidualBlock, self).__init__()
         padding = kernel_size // 2 
         self.conv1 = nn.Conv2d(in_features, out_features, kernel_size, stride, padding)
         self.conv2 = nn.Conv2d(in_features, out_features, kernel_size, stride, padding) 
         self.conv3 = nn.Conv2d(out_features, out_features, kernel_size, stride, padding) 
-        self.bn1 = nn.BatchNorm2d(out_features)
-        self.bn2 = nn.BatchNorm2d(out_features)
-        self.bn3 = nn.BatchNorm2d(out_features)
+        self.bn1 = nn.BatchNorm2d(out_features, momentum)
+        self.bn2 = nn.BatchNorm2d(out_features, momentum)
+        self.bn3 = nn.BatchNorm2d(out_features, momentum)
         self.relu = nn.ReLU()
         
     def forward(self, x):
