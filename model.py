@@ -26,10 +26,10 @@ class ResidualBlock(nn.Module):
         return out
 
 class FeatureExtractionModule(nn.Module):
-    def __init__(self, in_features, out_features, kernel_size, pool_size, stride):
+    def __init__(self, in_features, out_features, kernel_size, pool_size, stride, momentum):
         super(FeatureExtractionModule, self).__init__()
         self.conv1 = nn.Conv2d(in_features, out_features, stride)
-        self.bn1 = nn.BatchNorm2d(out_features)
+        self.bn1 = nn.BatchNorm2d(out_features, momentum)
         self.relu = nn.relu()
         self.mp = nn.MaxPool2d(pool_size, stride)
         self.rb = ResidualBlock(in_features, out_features, kernel_size, stride)
