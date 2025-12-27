@@ -1,5 +1,6 @@
 import torch 
 import torch.nn as nn
+import torch.nn.functional as F
 
 class ResidualBlock(nn.Module):
     def __init__(self, in_features, out_features, kernel_size, stride, momentum, padding): 
@@ -62,8 +63,60 @@ class FeatureExtractionModule(nn.Module):
         fwd = self.dropout2(feature_vectors)
         out = self.fc2(fwd)
         return feature_vectors, out
-        
-        
+
+class ClassificationModule(nn.Module):
+    def __init__(self, in_channels, num_classes, input_length=None):
+        super(ClassificationModule, self).__init__()
+        self.conv1 = nn.Conv1d(in_channels, 64, kernel_size,padding)
+        self.bn1 = nn.BatchNorm1d(64)
+        self.pool1 = nn.MaxPool1d(kernel_size, stride)
+        self.conv2 = nn.Conv1d(64, 128, kernel_size, padding)
+        self.bn2 = nn.BatchNorm1d(128)
+        self.pool2 = nn.MaxPool1d(kernel_size, stride)
+        self.conv3 = nn.Conv1d(128, 256, kernel_size, padding)
+        self.bn3 = nn.BatchNorm1d(256)
+        self.pool3 = nn.MaxPool1d(kernel_size, stride)
+        self.relu = nn.ReLu()
+        self.flatten = nn.Flatten()
+        self.flattened_size = None
+        self.fc1 = None
+        self.fc2 = None
+        self.num_classes = num_classes
+        self.input_length = input_length
+
+        if input_length is not None:
+            self.initialize_dense_layers(input_length)
+
+    def initialize_dense_layers(self, input_length):
+        """After we know the input size"""
+        return x
+
+    def forward(self, x):
+        if self.fc1 is None:
+            input_length = x.size()
+            self.initialize_dense_layers(input_length)
+            sef.to(x.device)
+
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.pool1(x)
+        x = self.conv2(x)
+        x = self.bn2(x)
+        x = self.relu(x)
+        x = self.pool2(x)
+        x = self.conv3(x)
+        x = self.bn3(x)
+        x = self.relu(x)
+        x = self.pool3(x)
+        x = self.flatten(x)
+        x = self.dropout1(x)
+        x = self.relu(self.fc1(x))
+        x = self.dropout2(x)
+        x = self.fc2(x)
+
+        return x
+            
         
         
         
