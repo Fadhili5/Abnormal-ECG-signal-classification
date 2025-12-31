@@ -38,7 +38,7 @@ class FeatureExtractionModule(nn.Module):
         self.flatten = nn.Flatten()
         self.dropout1 = nn.Dropout(dropout)
         self.fc1 = nn.Sequential(
-            nn.Linear(#trouble finding dimensions after flattening, 64),
+            nn.LazyLinear(64),
             nn.ReLU()
         )
         self.dropout2 = nn.Dropout(dropout)
@@ -63,6 +63,7 @@ class FeatureExtractionModule(nn.Module):
         fwd = self.dropout2(feature_vectors)
         out = self.fc2(fwd)
         return feature_vectors, out
+
 
 class ClassificationModule(nn.Module):
     def __init__(self, in_channels, num_classes, input_length=None):
