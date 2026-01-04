@@ -168,7 +168,7 @@ class ClassificationModule(nn.Module):
         self.conv3 = nn.Conv1d(128, 256, kernel_size, padding)
         self.bn3 = nn.BatchNorm1d(256)
         self.pool3 = nn.MaxPool1d(kernel_size, stride)
-        self.relu = nn.ReLu()
+        self.relu = nn.ReLU()
         self.flatten = nn.Flatten()
         self.flattened_size = None
         self.fc1 = None
@@ -187,7 +187,7 @@ class ClassificationModule(nn.Module):
         if self.fc1 is None:
             input_length = x.size()
             self.initialize_dense_layers(input_length)
-            sef.to(x.device)
+            self.to(x.device)
 
         x = self.conv1(x)
         x = self.bn1(x)
