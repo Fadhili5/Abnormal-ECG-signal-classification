@@ -3,8 +3,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 import pandas as pd
 import os
+import cv2
+import shap
 import numpy as np
 from torch.utils.data import TensorDataset, DataLoader
+from torch.autograd import Variable
 
 arr = []
 ids = []
@@ -208,6 +211,76 @@ class ClassificationModule(nn.Module):
         x = self.fc2(x)
 
         return x
+            
+
+class GradCAM:
+    def __init__(self, model, target_layer):
+        self.model = model
+        self.target_layer = target_layer
+        self.gradients = None
+        self.activations = None
+        
+        #register hooks
+        self.target_layer.register_forward_hook(self.save_activation)
+        self.target_layer.register_full_backward_hook(self.save_gradient)
+        
+    def save_activation(self, module, input, output):
+        self.activations = output
+        
+    def save_gradient(self, module, grad_input, grad_output):
+        self.gradients = grad_output[0]
+        
+    def generate_cam(self, input_tensor, class_idx= None):
+        self.model.eval()
+        
+        #forward pass
+        output = self.model(input_tensor)
+        
+        if class_idx is None:
+            class_idx = output.argmax(dim=1)
+            
+        #backward pass
+        self.model.zero_grad()
+        score = output[:, class_idx] if isinstance(class_idx, int) else output.gather(1, class_idx.unsqueeze(1))
+        score.backward()
+        
+        gradients = self.gradients[0]
+        activations = self.activations[0]
+        
+        weights = torch.mean(gradients, dim=(1, 2), keepdim=True) # Global average pooling of gradients
+        
+        cam = torch.sum(weights * activations, dim=0, keepdim=True) # Weighted combination of activation map
+        cam = F.relu(cam)
+        #Normalize the CAM to 0-1
+        cam = cam.squeeze().cpu().numpy()
+        cam = (cam - cam.min()) / (cam.max() - cam.min() + 1e-8)
+        
+        return cam, output
+    
+class SHAPExplainer:
+    def __init__(self, model, background_data, device='cpu'):
+        self.model = model
+        self.device = device
+        self.background_data = background_data.to(device)
+        self.explainer = None
+        
+    def create_explainer(self):
+        """Create the SHAP deep explainer"""
+        self.model.eval()
+        self.explainer = shap.DeepExplainer(self.model, self.background_data)
+        return self.explainer
+    
+    def explain(self, input_data, n_samples=100):
+        """Get SHAP values for the input data"""
+        if self.explainer is None:
+            self.create_explainer()
+            
+        input_data = input_data.to(self.device)
+        shap_values = self.explainer.shap_values(input_data, nsamples = n_samples)
+        return shap_values
+    
+    def plot_shap_values(self, shap_values, input_data, class_idx=0, max_display=10):
+        shap.summary_plot(shap_values[class_idx], input_data.cpu().numpy(), max_display=max_display, show=False)
             
 
 dataset = TensorDataset(x, y)
