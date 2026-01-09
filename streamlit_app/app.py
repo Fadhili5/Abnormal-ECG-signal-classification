@@ -198,10 +198,25 @@ Rules:
 def load_model():
     model = FeatureExtractionModule(config)
     try:
-        model.load_state_dict(torch.load('best_model.pth', map_location='cpu'))
-        model.eval()
-        return model, True
-    except FileNotFoundError:
+        # Get the directory where this script is located
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        model_path = os.path.join(script_dir, 'best_model.pth')
+        
+        # Try loading from script directory first
+        if os.path.exists(model_path):
+            model.load_state_dict(torch.load(model_path, map_location='cpu'))
+            model.eval()
+            return model, True
+        
+        # Fallback to current working directory
+        if os.path.exists('best_model.pth'):
+            model.load_state_dict(torch.load('best_model.pth', map_location='cpu'))
+            model.eval()
+            return model, True
+        
+        return model, False
+    except Exception as e:
+        st.error(f"Model loading error: {str(e)}")
         return model, False
 
 
