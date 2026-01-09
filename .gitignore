@@ -1,0 +1,12 @@
+*.pth
+__pycache__/
+*.pyc
+.streamlit/secrets.toml
+venv/
+.env
+*.log
+.DS_Store
+*.pyo
+*.egg-info/
+dist/
+build/
