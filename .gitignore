@@ -131,8 +131,8 @@ cython_debug/
 # Model files
 *.pth
 
-# Streamlit secrets
-**/.streamlit/secrets.toml
+# Streamlit secretss
+streamlit_app/.streamlit/secrets.toml
 
 # OS files
 .DS_Store
