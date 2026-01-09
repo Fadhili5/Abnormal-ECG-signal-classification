@@ -132,7 +132,7 @@ cython_debug/
 *.pth
 
 # Streamlit secrets
-.streamlit/secrets.toml
+**/.streamlit/secrets.toml
 
 # OS files
 .DS_Store
