@@ -128,8 +128,8 @@ cython_debug/
 # PyPI
 .pypirc
 
-# Model files
-*.pth
+# # Model files
+# *.pth
 
 # Streamlit secretss
 streamlit_app/.streamlit/secrets.toml
