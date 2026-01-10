@@ -28,6 +28,9 @@ st.set_page_config(
 )
 
 def resample_signal(signal, original_rate, target_rate=100):
+    """
+    Resample ECG signal to target sampling rate using linear interpolation.
+    """
     if original_rate == target_rate:
         return signal
     original_length = len(signal)
@@ -37,6 +40,7 @@ def resample_signal(signal, original_rate, target_rate=100):
 
 
 def process_single_signal(signal, sampling_rate):
+    """ Preprocess a single ECG signal for model inference."""
     if sampling_rate != 100:
         signal = resample_signal(signal, sampling_rate, 100)
     
@@ -88,6 +92,12 @@ def parse_csv(content, device_type='generic', sampling_rate=100):
 
 
 def generate_demo_ecg(ecg_type='normal', duration_sec=10, fs=100):
+    """
+    Generate synthetic ECG signal for demonstration purposes.
+    
+    Creates a physiologically-inspired ECG waveform with P-wave, QRS complex,
+    and T-wave components. Can generate both normal and abnormal patterns.
+    """    
     t = np.linspace(0, duration_sec, duration_sec * fs)
     ecg = np.zeros_like(t)
     
@@ -128,18 +138,40 @@ def initialize_gemini():
 
 
 def estimate_heart_rate(signal, fs):
+    """"
+    Estimate heart rate from ECG signal using peak detection.
+    
+    Detects R-peaks in the QRS complex and calculates heart rate based
+    on R-R intervals. Uses scipy's find_peaks for robust detection.
+    
+    Algorithm:
+    1. Detect R-peaks with minimum distance of 0.6s (100 bpm max)
+    2. Calculate R-R intervals in seconds
+    3. Compute mean heart rate: 60 / mean(RR_interval)   
+    """
     try:
         from scipy.signal import find_peaks
+        # Detect R-peaks (QRS complexes)
+        # distance: minimum samples between peaks (0.6s = 100 bpm limit)
+        # prominence: minimum peak height relative to baseline
         peaks, _ = find_peaks(signal, distance=int(0.6 * fs), prominence=0.3)
         if len(peaks) < 2:
             return 75.0
         rr_intervals = np.diff(peaks) / fs
-        return 60 / np.mean(rr_intervals)
+        return 60 / np.mean(rr_intervals) # Convert to BPM
     except:
         return 75.0
 
 
 def analyze_with_gemini(gemini_model, results, signal, fs):
+    """
+    Generate AI-powered medical interpretation using Google Gemini.
+    
+    Creates a structured, patient-friendly explanation of ECG results including:
+    - What was found in the ECG
+    - Medical significance
+    - Recommended next steps
+    """
     hr = estimate_heart_rate(signal, fs)
     diagnosis = results['detailed_class']
     confidence = max(results['all_probs'].values()) * 100
@@ -221,6 +253,12 @@ def load_model():
 
 
 def predict(model, signal, sampling_rate):
+    """
+    Predict ECG classification using trained model.
+    
+    Performs end-to-end inference pipeline: Signal preprocessing and RPM generation,
+    Model forward pass, Probability calculation via softmax, Class prediction
+    """
     rpm = process_single_signal(signal, sampling_rate)
     
     with torch.no_grad():
@@ -285,6 +323,7 @@ def main():
     
     tabs = st.tabs(["▶ Analyze", "📖 Instructions"])
     
+    # ----- ANALYSIS TAB -----
     with tabs[0]:
         if not model_loaded:
             st.warning("⚠ Please place trained model file in the project directory")
@@ -293,6 +332,7 @@ def main():
         signal = None
         fs = 100
         
+        # Load ECG data based on source
         if source == "Apple Watch" and uploaded_file:
             try:
                 signal, fs = parse_csv(uploaded_file, 'apple')
@@ -319,6 +359,7 @@ def main():
             signal, fs = generate_demo_ecg(ecg_type=ecg_type)
             st.info(f"ℹ Generated {demo_type} ({len(signal)} samples at {fs} Hz)")
         
+        # Run analysis if signal is loaded        
         if signal is not None and len(signal) > 0:
             if st.button("▶ Analyze My ECG", type="primary", use_container_width=True):
                 with st.spinner("Analyzing your ECG..."):
@@ -358,7 +399,8 @@ def main():
         
         elif source != "Demo ECG":
             st.info("← Upload an ECG file to get started")
-    
+
+    # ----- INSTRUCTIONS TAB -----    
     with tabs[1]:
         if source == "Apple Watch":
             st.markdown("""
