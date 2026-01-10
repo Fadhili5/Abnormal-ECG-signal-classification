@@ -40,6 +40,7 @@ def print_banner(title, char="=", width=60):
 
 
 def minmax_normalize(tensor, dim=None, eps=1e-8):
+    """ Perform min-max normalization on a tensor to scale values to [0, 1]. """
     if dim is not None:
         t_min = tensor.min(dim=dim, keepdim=True)[0]
         t_max = tensor.max(dim=dim, keepdim=True)[0]
@@ -54,9 +55,9 @@ class Config:
     DATASET = "khyeh0719/ptb-xl-dataset"
     
     # Data parameters
-    SIGNAL_LENGTH = 1000
-    RPM_SIZE = 72
-    SAMPLING_RATE = 100
+    SIGNAL_LENGTH = 1000 # Target length for ECG signals (time steps)
+    RPM_SIZE = 72 # Dimension of square RPM matrix (72x72)
+    SAMPLING_RATE = 100 # sampling frequency of ECG signals in Hz
     
     # Model parameters
     NUM_CLASSES = 5
@@ -67,7 +68,7 @@ class Config:
     CONV_STRIDE = 1
     POOL_STRIDE = 2
     PADDING = 1
-    DROPOUT = 0.4
+    DROPOUT = 0.4 #adjusted dropout to 0.4 from  prevent regularization from holding back learning
     MOMENTUM = 0.1
     NUM_RESIDUAL_LAYERS = 3
     FEATURE_DIM = 256
@@ -82,21 +83,23 @@ class Config:
     DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
     # Class imbalance handling
-    OVERSAMPLE_RATIO = 0.3
-    WEIGHT_DECAY = 1e-4
+    OVERSAMPLE_RATIO = 0.3     # SMOTE: minority classes to 30% of majority
+    WEIGHT_DECAY = 1e-4     # L2 regularization
     
     # Focal Loss parameters
-    USE_FOCAL_LOSS = True
-    FOCAL_GAMMA = 2.5
+    USE_FOCAL_LOSS = True  #opted to use focal loss instead of cross entropy to boost minority classes
+    FOCAL_GAMMA = 2.5 #minority classes underperformed requiring us to adjust to 2.5
     FOCAL_LABEL_SMOOTHING = 0.1
     USE_CLASS_BALANCED_LOSS = True  # Use effective number weighting
     CB_BETA = 0.9999  # Class-balanced loss beta parameter
     
-    # Debug mode
+    # Debug mode for quick testing(small datasets)
     DEBUG_MODE = False
     DEBUG_SAMPLES = 500
     
     # PTB-XL diagnostic superclasses
+    # NORM: Normal ECG, MI: Myocardial Infarction, STTC: ST/T Change
+    # CD: Conduction Disturbance, HYP: Hypertrophy
     CLASS_MAP = {
         "NORM": 0,
         "MI": 1,
@@ -138,12 +141,18 @@ def load_ptbxl_metadata(dataset_path):
     base_path = csv_path.parent
     df = pd.read_csv(csv_path, index_col='ecg_id')
     df.scp_codes = df.scp_codes.apply(ast.literal_eval)
-    scp_files = list(Path(dataset_path).rglob("scp_statements.csv"))
+    scp_files = list(Path(dataset_path).rglob("scp_statements.csv")) # Load SCP statements (diagnostic code definitions)
     scp_df = pd.read_csv(scp_files[0], index_col=0) if scp_files else None
     return df, base_path, scp_df
 
 
 def aggregate_diagnostic(y_dic, scp_df):
+    """
+    Extract diagnostic superclasses from SCP codes dictionary.
+    
+    PTB-XL uses SCP (Standard Communications Protocol) codes for diagnoses.
+    This function maps fine-grained SCP codes to diagnostic superclasses.
+    """    
     return list({
         scp_df.loc[key].diagnostic_class
         for key in y_dic
@@ -152,6 +161,14 @@ def aggregate_diagnostic(y_dic, scp_df):
 
 
 def prepare_ptbxl_labels(df, scp_df):
+    """
+    Prepare PTB-XL labels by aggregating to diagnostic superclasses.
+    
+    Process:
+    1. Map SCP codes to diagnostic superclasses
+    2. Filter records with exactly one superclass (unambiguous labels)
+    3. Map superclass names to integer indices
+    """    
     if scp_df is None:
         raise ValueError("SCP statements required for label preparation!")
     df['diagnostic_superclass'] = df.scp_codes.apply(
@@ -164,7 +181,7 @@ def prepare_ptbxl_labels(df, scp_df):
     return df_filtered
 
 
-def load_ecg_signals(df, base_path, lead_idx=1):
+def load_ecg_signals(df, base_path, lead_idx=1): #Loads raw ECG signals from WFDB format with 12 leads; it loads a single lead for each record
     signals, valid_indices, labels = [], [], []
     filename_col = 'filename_lr' if 'filename_lr' in df.columns else 'filename_hr'
     df_to_load = df.head(config.DEBUG_SAMPLES) if config.DEBUG_MODE else df
@@ -187,24 +204,33 @@ def load_ecg_signals(df, base_path, lead_idx=1):
 # DATA PREPROCESSING
 # ============================================================================
 def adjust_signal_length(signals, target_length, min_length_ratio=0.8):
+    """
+    Adjust ECG signals to target length by truncation or padding.
+    
+    Strategy:
+    - Signals >= target_length: Truncate to target_length
+    - Signals >= target_length * min_length_ratio: Pad with last value
+    - Signals < minimum threshold: Discard
+    """    
     adjusted = []
     for sig in signals:
         sig_tensor = torch.from_numpy(sig).float()
         if len(sig_tensor) >= target_length:
-            adjusted.append(sig_tensor[:target_length])
+            adjusted.append(sig_tensor[:target_length]) # Truncate long signals
         elif len(sig_tensor) >= target_length * min_length_ratio:
             padding = target_length - len(sig_tensor)
-            adjusted.append(torch.cat([sig_tensor, sig_tensor[-1].repeat(padding)]))
+            adjusted.append(torch.cat([sig_tensor, sig_tensor[-1].repeat(padding)])) # Pad short signals with last value
+            # Signals too short are discarded
     return adjusted
 
 
-def zscore_normalize(x_stacked, eps=1e-8):
+def zscore_normalize(x_stacked, eps=1e-8): #handles physiological variability and noise
     means = x_stacked.mean(dim=1, keepdim=True)
     stds = x_stacked.std(dim=1, keepdim=True, unbiased=False)
     return (x_stacked - means) / (stds + eps)
 
 
-def preprocess_signals(signals, target_length):
+def preprocess_signals(signals, target_length): #adjust length and normalize.
     adjusted = adjust_signal_length(signals, target_length)
     if not adjusted:
         raise ValueError("No signals with suitable length found")
@@ -213,6 +239,20 @@ def preprocess_signals(signals, target_length):
 
 
 def create_rpm_representations(x_normalized, m=72):
+    """
+    Create Recurrence Plot Matrix (RPM) representations from 1D ECG signals.
+    
+    RPM captures temporal dynamics by computing pairwise distances between
+    downsampled signal points. The resulting 2D matrix can be processed by CNNs.
+    
+    Process:
+    1. Downsample signal to m points using adaptive average pooling
+    2. Compute pairwise Euclidean distance matrix (m x m)
+    3. Normalize to [0, 1] range
+    
+    Mathematical formulation:
+        RPM[i,j] = |x_downsampled[i] - x_downsampled[j]|
+    """    
     x_downsampled = F.adaptive_avg_pool1d(x_normalized.unsqueeze(1), m).squeeze(1)
     batch_size = x_downsampled.shape[0]
     rpm_batch = x_downsampled.unsqueeze(2) - x_downsampled.unsqueeze(1)
@@ -230,13 +270,12 @@ class FocalLoss(nn.Module):
     
     FL(p_t) = -alpha_t * (1 - p_t)^gamma * log(p_t)
     
-    Args:
-        alpha: Class weights tensor or scalar (None for no weighting)
-        gamma: Focusing parameter - higher values focus more on hard examples
-        label_smoothing: Prevents overconfidence (0 to disable)
-        reduction: 'mean', 'sum', or 'none'
+    Where:
+        - p_t: probability of correct class
+        - gamma: focusing parameter (higher = more focus on hard examples)
+        - alpha_t: class weight (balances importance of different classes)
     """
-    EPS = 1e-7
+    EPS = 1e-7 # Numerical stability constant
     
     def __init__(self, alpha=None, gamma=2.0, label_smoothing=0.1, reduction='mean'):
         super().__init__()
@@ -285,7 +324,7 @@ class FocalLoss(nn.Module):
         log_p_t = log_p.gather(1, targets.unsqueeze(1)).squeeze(1)
         
         focal_weight = self._get_focal_weights(p_t, targets)
-        ce_loss = self._apply_label_smoothing(log_p, log_p_t)
+        ce_loss = self._apply_label_smoothing(log_p, log_p_t) # Compute cross-entropy with optional label smoothing
         
         return self._reduce(focal_weight * ce_loss)
     
@@ -323,6 +362,15 @@ class FocalLoss(nn.Module):
 
 
 class ResidualBlock(nn.Module):
+    """
+    Residual block with skip connection for deeper network training.
+    
+    Architecture:
+        Input -> Conv -> BN -> ReLU -> Conv -> BN -> (+Input) -> ReLU -> Output
+    
+    The skip connection allows gradients to flow directly through the network,
+    enabling training of very deep networks without vanishing gradients.
+    """
     def __init__(self, channels, kernel_size=3, stride=1, momentum=0.1, padding=1): 
         super(ResidualBlock, self).__init__()
         self.conv1 = nn.Conv2d(channels, channels, kernel_size, stride, padding)
@@ -387,6 +435,25 @@ class FeatureExtractionModule(nn.Module):
 # EXPLAINABILITY MODULES
 # ============================================================================
 class GradCAM:
+    """
+    Gradient-weighted Class Activation Mapping for visual explanation.
+    
+    Grad-CAM generates heatmaps showing which regions of the input (RPM) are
+    important for the model's prediction. It uses gradients flowing into the
+    final convolutional layer to weight the activation maps.
+    
+    Process:
+    1. Forward pass: save activations of target layer
+    2. Backward pass: compute gradients w.r.t. target class
+    3. Weight activations by gradients (global average pooled)
+    4. Create heatmap: weighted sum of activation maps
+    
+    Mathematical formulation:
+        CAM = ReLU(Σ α_k * A_k)
+        where α_k = (1/Z) Σ Σ ∂y^c / ∂A_k
+    
+    Reference: Selvaraju et al., "Grad-CAM: Visual Explanations from Deep Networks", ICCV 2017
+    """    
     def __init__(self, model, target_layer):
         self.model = model
         self.target_layer = target_layer
@@ -395,10 +462,10 @@ class GradCAM:
         self.target_layer.register_forward_hook(self.save_activation)
         self.target_layer.register_full_backward_hook(self.save_gradient)
         
-    def save_activation(self, module, input, output):
+    def save_activation(self, module, input, output): # Hook to save forward pass activations.
         self.activations = output.detach()
         
-    def save_gradient(self, module, grad_input, grad_output):
+    def save_gradient(self, module, grad_input, grad_output): # Hook to save backward pass gradients
         self.gradients = grad_output[0].detach()
         
     def generate_cam(self, input_tensor, class_idx=None):
@@ -420,6 +487,17 @@ class GradCAM:
 
 
 class SHAPExplainer:
+    """
+    SHAP (SHapley Additive exPlanations) for model interpretation.
+    
+    SHAP uses game theory to assign each input feature an importance value
+    for a particular prediction. It provides a unified framework for
+    interpreting model outputs.
+    
+    For deep learning, DeepExplainer uses a computationally efficient
+    approximation based on DeepLIFT. --- Reference:
+        Lundberg & Lee, "A Unified Approach to Interpreting Model Predictions", NeurIPS 2017
+    """    
     def __init__(self, model, background_data, device='cpu'):
         self.model = model
         self.device = device
@@ -431,6 +509,7 @@ class SHAPExplainer:
         self.explainer = None
         
     def create_explainer(self):
+        """Initialize SHAP DeepExplainer with background data."""        
         self.model.eval()
         self.explainer = shap.DeepExplainer(self.model_wrapper, self.background_data)
         return self.explainer
@@ -444,6 +523,12 @@ class SHAPExplainer:
 
 
 class SHAPCompatibleModel(nn.Module):
+    """
+    Simplified model wrapper for SHAP compatibility.
+    
+    SHAP's DeepExplainer sometimes has issues with complex models.
+    This wrapper provides a simplified forward pass while maintaining the same computation graph.
+    """    
     def __init__(self, original_model):
         super().__init__()
         self.conv1 = original_model.conv1
@@ -474,8 +559,7 @@ class SHAPCompatibleModel(nn.Module):
 class ECGAugmentation:
     """ECG-appropriate augmentation for RPM representations.
     
-    Avoided using flipping because RPMs encode temporal
-    distance relationships, and flipping would destroy signal semantics.
+    Avoided using flipping because RPMs encode temporal distance relationships, and flipping would destroy signal semantics.
     """
     def __init__(self, noise_std=0.04, scale_range=(0.92, 1.08), 
                  p=0.5, noise_p=0.5, scale_p=0.5):
@@ -837,10 +921,8 @@ def main():
         criterion = nn.CrossEntropyLoss(weight=class_weights)
         print("\n✓ Using Cross Entropy Loss with class weights")
     
-    optimizer = torch.optim.AdamW(model.parameters(), lr=config.LEARNING_RATE, weight_decay=config.WEIGHT_DECAY)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=1e-6)
-    
-    best_val_f1, patience_counter = 0.0, 0
+    # AdamW's reliable regularization prevents the model from memorizing normal patterns and  synthetic SMOTE artifacts
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config.LEARNING_RATE, weight_decay=config.WEIGHT_DECAY) 
     train_losses, val_losses, train_accs, val_accs = [], [], [], []
     
     for epoch in range(config.NUM_EPOCHS):

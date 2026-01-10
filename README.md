@@ -12,6 +12,29 @@ This application analyzes electrocardiogram (ECG) signals and classifies them in
 
 The model uses Recurrence Plot Matrix (RPM) representations of ECG signals for feature extraction and classification.
 
+## Project Structure
+
+```
+Abnormal-ECG-signal-classification/
+├── streamlit_app/              # Deployment & Web Interface
+│   ├── app.py                  # Main Streamlit application
+│   ├── model.py                # Model architecture
+│   ├── best_model.pth          # Trained model weights (use git LFS to track it)
+│   └── .streamlit/
+│       └── secrets.toml        # (add .toml in gitignore)
+├── model.py                    # Original Training Code
+├── requirements.txt
+├── .gitignore               
+├── .gitattributes              # Git LFS configuration
+└── README.md
+```
+
+
+**Important Note:**
+- **`streamlit_app/`**: Contains the web application for ECG analysis and inference
+- **`model.py` (root)**: Original model training and development code
+- The model architecture in `streamlit_app/model.py` is adapted for deployment and inference only
+
 ## Features
 
 - **Multi-class ECG Classification**: Detects 5 different cardiovascular conditions
@@ -211,7 +234,7 @@ This application is for **educational and research purposes only**. It should NO
 
 ## License
 
-GNU GENERAL PUBLIC LICENSE
+GNU GENERAL PUBLIC LICENSE. See <https://www.gnu.org/licenses/>.
 
 ## Contributing
 
@@ -223,7 +246,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 - Research papers : Wei Zeng, Liangmin Shan, Chengzhi Yuan, Shaoyi Du,
 Advancing cardiac diagnostics: Exceptional accuracy in abnormal ECG signal classification with cascading deep learning and explainability analysis
 https://doi.org/10.1016/j.asoc.2024.112056.
-(Some of the strategies we used in the project were due to inspiration from this paper)
+(Some of the strategies used in the project were inspired by this paper)
 ---
 
 **Note**: Make sure to install Git LFS before cloning to properly download the model files.
